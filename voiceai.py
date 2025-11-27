@@ -33,14 +33,14 @@ async def main():
         deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
         if not deepgram_api_key:
             raise ValueError("DEEPGRAM_API_KEY environment variable is not set")
-        print(f"API Key found:")
+        print(f"API Key found!")
         # Initialize Deepgram client
         client = DeepgramClient(
             api_key=deepgram_api_key
         )
 
         # Transcribe with Flux
-        print("\n🎤 Transcribing with Flux...")
+        print("\n🎤 Transcribing with Flux...\n")
         transcript = ""
         transcript_done = asyncio.Event()
 
@@ -50,18 +50,24 @@ async def main():
                 if hasattr(message, 'event') and message.event == 'EndOfTurn':
                     if hasattr(message, 'transcript') and message.transcript:
                         transcript += " " + message.transcript.strip()
-                        print(f"✓ Transcript: '{transcript}'")
+                        print("\n")
+                        print("~" * 90)
+                        print(f"\n✓ Current Transcript: '{transcript if transcript else 'Empty'}'\n")
+                        print("Please let me know what you'd like to ask.")
+                        print("Use below controls to manage recording:")
+                        print("'Esc'       -> To stop recording and process your request.\n")
+                        print("'Space Bar' -> To flush previous recording and re-record.")
                         transcript_done.set()
         
         # === Event Handlers ===
         def on_open(self, **kwargs):
-            print("Deepgram connection OPENED")
+            print("Deepgram connection OPENED!\n")
 
         def on_error(self, error, **kwargs):
             print(f"Error: {error}")
 
         def on_close(close_response, **kwargs):
-            print(f"Deepgram connection CLOSED")
+            print(f"Deepgram connection CLOSED!\n")
 
         with client.listen.v2.connect(model="flux-general-en", encoding="linear16", sample_rate=16000) as connection:
                 
@@ -76,13 +82,20 @@ async def main():
             # === Stream from Mac Microphone ===
             try:
                 print("Please let me know what you'd like to ask.")
-                print("Press 'Esc' to process your request.\n")
+                print("Use below controls to manage recording:")
+                print("'Esc'       -> To stop recording and process your request.\n")
+                print("'Space Bar' -> To flush previous recording and re-record.")
                 with MicrophoneStream() as mic_stream:
                     while True:
                         data = mic_stream.read(CHUNK, exception_on_overflow=False)
                         connection.send_media(data)
                         if keyboard.is_pressed('esc'):
                             break
+                        if keyboard.is_pressed('space'):
+                            print("\n")
+                            print("~" * 90)
+                            print("Flushing previous recording. Please re-record your request.")
+                            transcript = ""
                         await asyncio.sleep(0.01)  # Small delay to prevent CPU overload
 
             except KeyboardInterrupt:
@@ -112,11 +125,22 @@ async def main():
                 You respond to user queries in a concise and informative manner.
                 You answer in a friendly and engaging manner.
                 Your answer should be in maximum of 100 words.
-                You do also categorize the user's intent based on their query and 
-                the query response generated into widely accepted categories.
-                Provide the response in a JSON format with two fields: 'response' and 'category'.
+                You do also categorize your generated response 
+                into one of the following categories and Sub-Category:
+                Category - Scientific Classification Systems - Sub-Categories such as Biology, Chemistry, Physics and Mathematics;
+                Category - Philosophical/Existential Categories - Sub-Categories such as Mind, Matter, Ethics, 
+                Metaphysics, Epistemology and Logic;
+                Category - Practical/Everyday Categorizations - Sub-Categories such as Food & Cooking, 
+                Travel & Geography, Fashion & Lifestyle, Home & Garden, Finance & Economics, 
+                Relationships & Social Dynamics, Career & Professional Development, Hobbies & Interests,
+                Technology & Computing, Arts & Literature, History & Culture, 
+                General Knowledge, Entertainment & Media, Health & Wellness, 
+                Environment & Nature, Education & Learning, Sports & Recreation.
+                Provide the response in a JSON format with two fields: 'response', 'category' and 'sub-category'.
                 The 'response' field contains your answer to the user's query.
-                The 'category' field contains the category of the user's intent.""",
+                The 'category' field contains the category of the user's intent.
+                The 'sub-category' field contains the sub-category of the user's intent.
+                """,
                 temperature=0.1
             )
         )
@@ -146,16 +170,19 @@ async def main():
             # Use parsed values (safe defaults if keys missing)
             parsed_response_text = parsed.get("response", "")
             parsed_category = parsed.get("category", "")
+            parsed_subcategory = parsed.get("sub-category", "")
             # Set our mutable variables instead of assigning to response.text``
             response_text = parsed_response_text or response_text
             response_text = response_text.replace('*', '')
             response_category = parsed_category or ""
+            response_subcategory = parsed_subcategory or ""
         except Exception as e:
             print(f"Failed to parse fenced JSON: {e}")
             # Keep original text on failure (response_text already set)
 
         print("✓ Response: " + response_text)
         print("✓ Category: " + response_category)
+        print("✓ Sub-Category: " + response_subcategory)
 
         # Generate TTS Response
         print("\n🔊 Generating TTS...")
