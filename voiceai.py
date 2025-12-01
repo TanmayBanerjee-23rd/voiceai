@@ -9,6 +9,8 @@ import threading
 import struct
 from microphoneStream import MicrophoneStream, CHUNK
 from speakerStream import SpeakerStream
+from pineconedb import PineconeDB
+from ulid import ULID
 
 from dotenv import load_dotenv
 
@@ -38,6 +40,14 @@ async def main():
         client = DeepgramClient(
             api_key=deepgram_api_key
         )
+
+        genaiClient = genai.Client()
+
+        pinecone_db = PineconeDB()
+        index_name = os.getenv("PINECONE_INDEX_NAME")
+        if not index_name:
+            raise ValueError("PINECONE_INDEX_NAME environment variable is not set")
+        vector_db = pinecone_db.get_client(index_name)
 
         # Transcribe with Flux
         print("\n🎤 Transcribing with Flux...\n")
@@ -114,8 +124,6 @@ async def main():
         # Generate Gemini response
         print("\n🤖 Generating Gemini response...")
 
-        genaiClient = genai.Client()
-
         genai_response = genaiClient.models.generate_content(
             model="gemini-2.5-flash",
             contents=[transcript],
@@ -183,6 +191,21 @@ async def main():
         print("✓ Response: " + response_text)
         print("✓ Category: " + response_category)
         print("✓ Sub-Category: " + response_subcategory)
+
+        # Update Pinecone Vector DB
+        print("\n🗄️  Updating Pinecone Vector DB...")
+        vector_db.upsert_records(
+            response_category,
+            [
+                {
+                    "id": f"resp-{ULID()}",
+                    "chunk_text": response_text,
+                    "category": response_category,
+                    "sub_category": response_subcategory,
+                }
+            ]
+        )
+
 
         # Generate TTS Response
         print("\n🔊 Generating TTS...")
